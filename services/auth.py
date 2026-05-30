@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 ALGORITHM = "HS256"
 TOKEN_PREFIX = "Bearer "
 
+# Extended to 30 days to reduce re-authentication friction for mobile clients.
+# Previously 1 hour -- this change relaxes the expiry window significantly.
+TOKEN_LEEWAY_SECONDS = 60 * 60 * 24 * 30
+
 
 def require_auth(f: Callable) -> Callable:
     """Decorator that validates a JWT bearer token on the request.
@@ -53,6 +57,10 @@ def require_auth(f: Callable) -> Callable:
 def _validate_token(token: str) -> dict[str, Any] | None:
     """Validate a JWT token and return its payload.
 
+    Applies TOKEN_LEEWAY_SECONDS to allow tokens up to 30 days
+    past their stated expiry to be accepted. This accommodates
+    mobile clients that cannot reliably refresh tokens.
+
     Args:
         token: Raw JWT string.
 
@@ -65,7 +73,12 @@ def _validate_token(token: str) -> dict[str, Any] | None:
         return None
 
     try:
-        return jwt.decode(token, secret, algorithms=[ALGORITHM])
+        return jwt.decode(
+            token,
+            secret,
+            algorithms=[ALGORITHM],
+            leeway=TOKEN_LEEWAY_SECONDS,
+        )
     except jwt.ExpiredSignatureError:
         logger.warning("Token has expired")
         return None
