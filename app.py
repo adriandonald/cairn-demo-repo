@@ -92,5 +92,34 @@ def create_order() -> Any:
     return jsonify(order), 201
 
 
+@app.route("/orders/<string:order_id>/cancel", methods=["POST"])
+@require_auth
+def cancel_order(order_id: str) -> Any:
+    """Cancel an order.
+
+    Only orders in 'pending' or 'confirmed' status can be cancelled.
+    Returns 409 if the order status does not permit cancellation.
+
+    Args:
+        order_id: The order UUID string.
+
+    Returns:
+        Updated order dict with status 'cancelled', or an error response.
+    """
+    user_id = request.user_id  # type: ignore[attr-defined]
+
+    try:
+        order = _order_service.cancel_order(order_id, user_id)
+    except ValueError as exc:
+        logger.warning("Cancel rejected for order %s: %s", order_id, exc)
+        return jsonify({"error": str(exc)}), 409
+
+    if order is None:
+        return jsonify({"error": "Order not found"}), 404
+
+    logger.info("Order %s cancelled via API by user %s", order_id, user_id)
+    return jsonify(order)
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=int(os.getenv("PORT", "5001")))

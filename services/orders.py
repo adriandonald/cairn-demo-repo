@@ -1,8 +1,8 @@
 """Order service.
 
-Handles business logic for creating, retrieving, and managing orders.
-In this demo the store is an in-memory dict; a real implementation
-would use the database layer in db/.
+Handles business logic for creating, retrieving, managing, and
+cancelling orders. In this demo the store is an in-memory dict;
+a real implementation would use the database layer in db/.
 """
 
 import logging
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 # In-memory store for demo purposes
 _ORDERS: dict[str, dict[str, Any]] = {}
+
+CANCELLABLE_STATUSES = {"pending", "confirmed"}
 
 
 class OrderService:
@@ -73,4 +75,39 @@ class OrderService:
         }
         _ORDERS[order_id] = order
         logger.info("Order %s created with %d items", order_id, len(items))
+        return order
+
+    def cancel_order(
+        self, order_id: str, user_id: str
+    ) -> dict[str, Any] | None:
+        """Cancel an order if it is in a cancellable state.
+
+        Only orders with status 'pending' or 'confirmed' can be
+        cancelled. Orders that have already shipped or been delivered
+        must be handled through the returns process instead.
+
+        Args:
+            order_id: The order's UUID string.
+            user_id: The requesting user's identifier.
+
+        Returns:
+            Updated order dict with status 'cancelled', or None if
+            the order was not found or does not belong to the user.
+
+        Raises:
+            ValueError: If the order status does not permit cancellation.
+        """
+        order = _ORDERS.get(order_id)
+        if order is None or order["user_id"] != user_id:
+            return None
+
+        if order["status"] not in CANCELLABLE_STATUSES:
+            raise ValueError(
+                f"Order {order_id} cannot be cancelled: "
+                f"status is '{order['status']}'"
+            )
+
+        order["status"] = "cancelled"
+        order["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+        logger.info("Order %s cancelled by user %s", order_id, user_id)
         return order
