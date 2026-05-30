@@ -13,6 +13,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from services.auth import require_auth
+from services.importer import import_orders_from_csv
 from services.orders import OrderService
 
 load_dotenv()
@@ -90,6 +91,27 @@ def create_order() -> Any:
     )
     logger.info("Created order %s for user %s", order["id"], user_id)
     return jsonify(order), 201
+
+
+@app.route("/orders/import", methods=["POST"])
+@require_auth
+def bulk_import_orders() -> Any:
+    """Import multiple orders from a CSV-style JSON payload.
+
+    Request body (JSON):
+        rows: list of {user_id, product_id, quantity, shipping_address}.
+
+    Returns:
+        Import summary with created count, failed rows, and created orders.
+    """
+    body = request.get_json(silent=True) or {}
+    rows = body.get("rows", [])
+
+    if not isinstance(rows, list) or len(rows) == 0:
+        return jsonify({"error": "rows must be a non-empty list"}), 400
+
+    result = import_orders_from_csv(rows)
+    return jsonify(result), 200
 
 
 if __name__ == "__main__":
