@@ -6,6 +6,7 @@ and health layers and exposes them via Flask routes.
 
 import logging
 import os
+from http import HTTPStatus
 from typing import Any
 
 from dotenv import load_dotenv
@@ -61,7 +62,7 @@ def get_order(order_id: int) -> Any:
     order = _order_service.get_order(order_id, user_id)
     if order is None:
         logger.warning("Order %d not found for user %s", order_id, user_id)
-        return jsonify({"error": "Order not found"}), 404
+        return jsonify({"error": "Order not found"}), HTTPStatus.NOT_FOUND
     return jsonify(order)
 
 
@@ -81,7 +82,7 @@ def create_order() -> Any:
     body = request.get_json(silent=True) or {}
 
     if not body.get("items") or not body.get("shipping_address"):
-        return jsonify({"error": "items and shipping_address are required"}), 400
+        return jsonify({"error": "items and shipping_address are required"}), HTTPStatus.BAD_REQUEST
 
     order = _order_service.create_order(
         user_id=user_id,
@@ -89,7 +90,7 @@ def create_order() -> Any:
         shipping_address=body["shipping_address"],
     )
     logger.info("Created order %s for user %s", order["id"], user_id)
-    return jsonify(order), 201
+    return jsonify(order), HTTPStatus.CREATED
 
 
 @app.route("/orders/<string:order_id>/cancel", methods=["POST"])
@@ -110,12 +111,12 @@ def cancel_order(order_id: str) -> Any:
 
     try:
         order = _order_service.cancel_order(order_id, user_id)
-    except ValueError as exc:
-        logger.warning("Cancel rejected for order %s: %s", order_id, exc)
-        return jsonify({"error": str(exc)}), 409
+    except ValueError:
+        logger.warning("Cancel rejected for order %s: status does not permit cancellation", order_id)
+        return jsonify({"error": "Order cannot be cancelled in its current status"}), HTTPStatus.CONFLICT
 
     if order is None:
-        return jsonify({"error": "Order not found"}), 404
+        return jsonify({"error": "Order not found"}), HTTPStatus.NOT_FOUND
 
     logger.info("Order %s cancelled via API by user %s", order_id, user_id)
     return jsonify(order)
